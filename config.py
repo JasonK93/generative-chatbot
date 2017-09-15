@@ -29,13 +29,13 @@ These buckets size seem to work the best
 # BUCKETS = [(8, 10), (12, 14), (16, 19)]
 
 # BUCKETS = [(16, 19)]
-BUCKETS = [(10, 13), (13, 16), (16, 20)]
-# BUCKETS = [(6, 8), (10, 13), (14, 18), (18, 23), (22, 27), (26, 31), (30, 35)]
+# BUCKETS = [(10, 13), (13, 16), (16, 20)]
+BUCKETS = [(6, 8), (10, 13), (14, 18), (18, 23), (22, 27), (26, 31), (30, 35)]
 
-NUM_LAYERS = 3
-HIDDEN_SIZE = 256
+NUM_LAYERS = 5
+HIDDEN_SIZE = 512
 BATCH_SIZE = 64
 
 LR = 0.5
 MAX_GRAD_NORM = 5.0
-NUM_SAMPLES = 512
+NUM_SAMPLES = 16384
