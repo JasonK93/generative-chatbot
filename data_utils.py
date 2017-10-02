@@ -1,5 +1,4 @@
 from __future__ import print_function
-from __future__ import division
 from __future__ import unicode_literals
 
 import json
@@ -9,20 +8,18 @@ import random
 import re
 from io import open
 import config
+
 import numpy as np
 
 
-# set the usual logging config I used before
 logging.basicConfig(
     format='%(asctime)s : %(levelname)s : %(message)s',
     level=logging.INFO
 )
 
-
-# tool-1 make dir
 def make_dir(path):
     """
-    make a directory if there is not one existing
+    Create a path if there is not one existing
     :param path:
     :return:
     """
@@ -30,86 +27,101 @@ def make_dir(path):
         os.mkdir(path)
 
 
-# Step1 : build vocab for the exist file, encoder and decoder have different vocab
-# consider the condition
+def basic_tokenizer(line, normalize_digits=True):
+    """
+    A tokenizer to tokenize text into tokens.
+    :param line: a string of sentence.
+    :param normalize_digits: whether to normalize digits.
+    """
+    line = re.sub('<u>', '', line)
+    line = re.sub('</u>', '', line)
+    line = re.sub('\[', '', line)
+    line = re.sub('\]', '', line)
+    words = []
+    _WORD_SPLIT = re.compile(u"([.,!?\"'-<>:;)(])")
+    _DIGIT_RE = re.compile(r"\d")
+    for fragment in line.strip().lower().split():
+        for token in re.split(_WORD_SPLIT, fragment):
+            if not token:
+                continue
+            if normalize_digits:
+                token = re.sub(_DIGIT_RE, b'#', token)
+            words.append(token)
+    return words
+
+
 def build_vocab(filename):
-    # FIXME: write some rule to fix tokens such as didn -> didn't, or some single letter
     """
-    Get a list of vocab which satisfied the threshold --->txt
+    Build vocabulary
     :param filename:
-    :return: the scale of vocab
+    :return:
     """
+    in_path = os.path.join(config.DATA_PATH,filename)
+    out_path = os.path.join(config.DATA_PATH,"vocab.{}".format(filename[-3:]))
 
-    # input file path
-    in_path = os.path.join(config.DATA_PATH, filename)
-
-    # output file path
-    out_path = os.path.join(config.DATA_PATH, "vocab.{}".format(filename[-3:]))
-
-    # initial one dictionary for vocab
     vocab = {}
-
-    # build vocab
     with open(in_path, encoding='utf-8') as f:
         for line in f.readlines():
             for token in basic_tokenizer(line):
                 if token not in vocab:
                     vocab[token] = 0
                 vocab[token] += 1
-    # sort the vocab by frequency
-    # sorted_vocab <type "list">
+                # sort by frequency
+                # sorted_vocab <type "list">
     sorted_vocab = sorted(vocab, key=vocab.get, reverse=True)
-
-    with open(out_path, 'w', encoding='utf-8') as f:
-        # <pad> means padding blank
+    with open(out_path, "w", encoding="utf-8") as f:
         f.write("<pad>" + "\n")
-        # <unk> means unknown token
         f.write("<unk>" + "\n")
-        # <s> means start of the sentence
         f.write("<s>" + "\n")
-        # <\s> means end of the sentence
         f.write("<\s>" + "\n")
-        vocab_scale = 4
-        # if the frequency less than the threshold, the word should be drop out
+        index = 4
         for word in sorted_vocab:
+            # Words with frequency less than `config.THRESHOLD`
+            # should be dropped.
             if vocab[word] < config.THRESHOLD:
-                return vocab_scale
+                return index
             f.write(word + "\n")
-            vocab_scale +=1
-    return vocab_scale
+            index += 1
+    return index
 
 
-# Step1-1 : change every line into tokens which can be set into vocab
-def basic_tokenizer(line, normalize_digits= True):
+def sentence2id(vocab, line):
     """
-    change line into tokens list
-    :param line: exp'I love U'
-    :param normalize_digits: True means normalize
-    :return:['I', 'love', 'U']
+    Convert a sentence string to word id list.
+    :param vocab: word2id
+    :type vocab: dict
+    :param line: a raw sentence
+    :return: list of word indices
     """
-    # initial a list to store words in line
-    words =[]
-    _word_split = re.compile(u"([.,!?\"'-<>:;)(])")
-    _digit_re = re.compile(r"\d")
-
-    for fragment in line.strip().lower().split():
-        for token in re.split(_word_split,fragment):
-            if not token:
-                continue
-            if normalize_digits:
-                token = re.sub(_digit_re, b'#', token)
-            words.append(token)
-    return words
+    # Get word index or get the index of <unk>.
+    return [vocab.get(token, vocab["<unk>"]) for token in basic_tokenizer(line)]
 
 
-# Step 2: token2id
+def load_vocab(vocab_path):
+    """
+    Load vocabulary.
+    Returns:
+        `words` is a list of vocab strings.
+        `word2id` is a dict of <word_str, word_id> pairs.
+    """
+    with open(vocab_path, encoding="utf-8") as f:
+        words = f.read().splitlines()
+    word2id = {words[i]: i for i in range(len(words))}
+    return words, word2id
+
+
 def token2id(data, mode):
-
-    vocab_path = 'vocab' + '.' + mode
+    """
+    Convert all the tokens in the data into their corresponding
+        index in the vocabulary.
+    Args:
+        data: "train" or "test"
+        mode: "enc" or "dec"
+    """
+    vocab_path = "vocab." + mode
     in_path = data + "." + mode
     out_path = data + "_ids." + mode
-
-    # get the one to one pair
+    # Get the dict of word2id: `vocab`.
     _, vocab = load_vocab(os.path.join(config.DATA_PATH, vocab_path))
     in_file = open(os.path.join(config.DATA_PATH, in_path),
                    encoding="utf-8")
@@ -129,36 +141,6 @@ def token2id(data, mode):
     out_file.close()
 
 
-# Step2-1 : load vocab
-def load_vocab(vocab_path):
-    """
-    Load vocabulary.
-    Returns:
-        `words` is a list of vocab strings.
-        `word2id` is a dict of <word_str, word_id> pairs.
-    """
-    # all vocab words in one list
-    with open(vocab_path, encoding="utf-8") as f:
-        words = f.read().splitlines()
-    # dict generator
-    word2id = {words[i]: i for i in range(len(words))}
-    return words, word2id
-
-
-# Step2-2 : change sentence2id array
-def sentence2id(vocab, line):
-    """
-    Convert a sentence string to word id list.
-    :param vocab: word2id
-    :type vocab: dict
-    :param line: a raw sentence
-    :return: list of word indices
-    """
-    # Get word index or get the index of <unk>.
-    return [vocab.get(token, vocab["<unk>"]) for token in basic_tokenizer(line)]
-
-
-# Step 1+2
 def process_data():
     logging.info("Processing raw data ......")
     logging.info("Step 1: Building vocabulary for encoder inputs ......")
@@ -169,7 +151,6 @@ def process_data():
     with open(os.path.join(config.DATA_PATH, "vocab_size.json"),
               "w", encoding="utf-8") as f:
         f.write(json.dumps(vocab_size, ensure_ascii=False))
-
     logging.info("Step 3: Tokenizing encoder inputs of training data...")
     token2id("train", "enc")
     logging.info("Step 4:Tokenizing decoder inputs of training data...")
@@ -180,7 +161,9 @@ def process_data():
     token2id("test", "dec")
 
 
-# GROUP data into buckets
+# after processing
+
+
 def load_data(enc_filename, dec_filename):
     """
     Load data from *_ids.* files and group the data into buckets.
@@ -211,6 +194,75 @@ def load_data(enc_filename, dec_filename):
         i += 1
     return data_buckets
 
+
+def _pad_input(input_, size):
+    """
+    Function for zero-padding.
+    """
+    return input_ + [config.PAD_ID] * (size - len(input_))
+
+
+def _reshape_batch(inputs, size, batch_size):
+    """
+    Create batch-major inputs. Batch inputs are just re-indexed inputs.
+    :param inputs: encoder_inputs or decoder_inputs, which is a list of batches.
+    :param size: encoder_size or decoder_size.
+    :param batch_size: batch size <type "int">.
+    """
+    batch_inputs = []
+    for length_id in range(size):
+        batch_inputs.append(np.array([inputs[batch_id][length_id]
+                                      for batch_id in range(batch_size)],
+                                     dtype=np.int32))
+    return batch_inputs
+
+
+def get_batch(data_bucket, bucket_id, batch_size=1):
+    """
+    Get one batch to feed into the model.
+    Args:
+        data_bucket: a certain bucket from `data_buckets`,
+            which is a list of <context, response> pairs.
+        bucket_id: a bucket index which is randomly chosen.
+        batch_size: batch size <type "int">.
+    """
+    # Only pad to the max length of the bucket
+    encoder_size, decoder_size = config.BUCKETS[bucket_id]
+    encoder_inputs, decoder_inputs = [], []
+
+    for _ in range(batch_size):
+        # Choose a <context, utterance> pair randomly from the current bucket.
+        encoder_input, decoder_input = random.choice(data_bucket)
+        # Pad both encoder and decoder, reverse the encoder.
+        encoder_inputs.append(list(reversed(_pad_input(encoder_input, encoder_size))))
+        decoder_inputs.append(_pad_input(decoder_input, decoder_size))
+    # encoder_inputs <type "list">: a batch of input data of encoder.
+    # encoder_inputs[0]: first padded encoder input of this batch,
+    #     e.g.: [0, 0, 41, 147, 30, 5]
+    # encoder_inputs[0][0]: first word index of the first encoder.
+    # Now we create batch-major vectors from the data selected above.
+    batch_encoder_inputs = _reshape_batch(encoder_inputs, encoder_size, batch_size)
+    # batch_encoder_inputs: a list of array.
+    # batch_encoder_inputs[0]: a 1-d array with shape (batch_size,). It
+    #     is the last time step of all encoder inputs within this batch.
+    batch_decoder_inputs = _reshape_batch(decoder_inputs, decoder_size, batch_size)
+
+    # Create decoder_masks to be 0 for decoders that are padding.
+    batch_masks = []
+    # For each time step while decoding.
+    for dec_time_step in range(decoder_size):
+        batch_mask = np.ones(batch_size, dtype=np.float32)
+        # For each example in this batch.
+        for idx in range(batch_size):
+            # we set mask to 0 if the corresponding target is <PAD> or <\s>.
+            # the corresponding decoder is decoder_input shifted by 1 forward.
+            if dec_time_step < decoder_size - 1:
+                target = decoder_inputs[idx][dec_time_step + 1]
+            # noinspection PyUnboundLocalVariable
+            if dec_time_step == decoder_size - 1 or target == config.PAD_ID:
+                batch_mask[idx] = 0.0
+        batch_masks.append(batch_mask)
+    return batch_encoder_inputs, batch_decoder_inputs, batch_masks
 
 if __name__ == '__main__':
     process_data()
